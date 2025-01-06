@@ -80,6 +80,7 @@ app = FastAPI()
 llm = LLM()
 
 class ChatRequest(BaseModel):
+    resume: str
     messages: List[Dict[str, str]]
 
 @app.get("/")
@@ -88,10 +89,15 @@ async def hello_world():
 
 @app.post("/chat")
 async def chat_completion(request: ChatRequest):
-    print(request)
     try:
+        # Format the system prompt with the resume
+        system_prompt = INTERVIEW_PROMPT.format(RESUME=request.resume)
+        
+        # Add the system prompt as the first message
+        messages = [{"role": "system", "content": system_prompt}] + request.messages
+        
         response = llm.chat_completion(
-            messages=request.messages,
+            messages=messages,
         )
         return {"response": response}
     except Exception as e:
