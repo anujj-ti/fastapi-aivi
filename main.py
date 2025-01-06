@@ -142,6 +142,11 @@ Fundamentals -
     Do they understand the pros and cons of the technologies they've used in the project?
     Do they understand basic concepts relating to the domain of the project?
     Do they have an understanding of general concepts (Git, OS, CN)?
+
+# When to stop the interview?
+- You can ask atmost 10 questions to the candidate.
+- Move the next question if the candidate is not able to answer the question or has successfully answered the question.
+- After 10 questions, you can simply thank the candidate and end the interview.
 """
 
 app = FastAPI()
