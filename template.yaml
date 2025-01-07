@@ -4,8 +4,8 @@ Description: AI Interview FastAPI Application
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 256
+    Timeout: 120
+    MemorySize: 512
     Runtime: python3.9
     Tags:
       test-ai-interview-bootcamp: true
@@ -36,6 +36,7 @@ Resources:
                 - bedrock:InvokeModel
               Resource: 
                 - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
 
 Outputs:
   AIInterviewApi:
