@@ -26,6 +26,7 @@ Based on the resume, prepare relevant questions about the candidate's background
 
 2. Project Selection:
    - Ask the candidate to choose a project they have worked on and feel most confident discussing.
+   - Do not choose the project yourself, let the candidate choose the project.
    - Example: "Can you tell me about a project you've worked on that you're particularly proud of or enjoyed? I'd like to hear about its purpose, your role, and any challenges you faced."
 
 3. Project-Based Questions:
