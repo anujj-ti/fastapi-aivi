@@ -9,21 +9,26 @@ export AWS_PROFILE=saml
 
 # Clean previous builds
 rm -rf .aws-sam
+rm -rf package
 
-# Install dependencies in a requirements directory
-mkdir -p .aws-sam/build/requirements
-pip install -r requirements.txt -t .aws-sam/build/requirements
+# Create a directory for the Lambda package
+mkdir -p package
 
-# Copy application files
-cp main.py .aws-sam/build/requirements/
-cp lambda_handler.py .aws-sam/build/requirements/
-cp llm.py .aws-sam/build/requirements/
+# Copy application files first
+cp main.py package/
+cp lambda_handler.py package/
+cp llm.py package/
+cp requirements.txt package/
+
+# Change to package directory and install dependencies
+cd package
+pip install -r requirements.txt -t .
+cd ..
 
 # Build SAM application
-sam build --profile saml
+sam build
 
 # Deploy the application
-# You can modify the stack name as needed
 sam deploy --guided --profile saml --stack-name ai-interview-app
 
 echo "Deployment completed!" 

@@ -15,7 +15,7 @@ Resources:
   AIInterviewFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: .
+      CodeUri: ./package
       Handler: lambda_handler.handler
       Description: AI Interview FastAPI Application
       Events:
@@ -29,14 +29,11 @@ Resources:
           STAGE: prod
           REGION: !Ref AWS::Region
       Policies:
-        - Version: '2012-10-17'
-          Statement:
+        - Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: 
-                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
-                - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+              Resource: '*'
 
 Outputs:
   AIInterviewApi:

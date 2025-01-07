@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# extras
+package/
+.aws-sam/
+
 # Python
 __pycache__/
 *.py[cod]
