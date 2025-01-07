@@ -91,8 +91,6 @@ Javascript
     Is javascript single threaded or multi-threaded? If it's single threaded, does that mean it can only do one thing at a time? How does this work in the browser?
     What is the difference between regular functions and arrow functions in JS? Which of these can I use as member functions in a class? If both, do I use them exactly the same way or is there a difference?
 
-
-
 2. Frontend
 - Storage
     What's the difference between local storage, cache, and session storage ?
@@ -109,7 +107,6 @@ Javascript
 - Others
     What is bundling? What is code splitting? What is minification? Why are any of these needed/used?
 
- 
 3. ML
 - Model Related
     Ask them which models they used? Why ?
@@ -147,6 +144,7 @@ Fundamentals -
 - You can ask atmost 10 questions to the candidate.
 - Move the next question if the candidate is not able to answer the question or has successfully answered the question.
 - After 10 questions, you can simply thank the candidate and end the interview.
+- Write [END OF INTERVIEW] in the last message at the end.
 """
 
 app = FastAPI()
