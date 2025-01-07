@@ -153,9 +153,15 @@ Your goal is to conduct a thorough and fair assessment of the candidate's abilit
 ASSESS_CANDIDATE_PROMPT = """
 You will be provided with a conversation between an interviewer and a candidate. Your goal is to assess the candidate based on the conversation.
 
+<resume>
+{RESUME}
+</resume>
+
 <conversation>
 {CONVERSATION}
 </conversation>
+
+Ensure the conversation aligns with the details mentioned in the resume.
 
 # Based on the the questions and responses, you need to answer the following questions regarding the candidate:
 Communication - 
@@ -175,8 +181,10 @@ Fundamentals -
     Do they have an understanding of general concepts (Git, OS, CN)?
 
 For each question provide the output in following manner:
-- [QUESTION] : Remark - Yes, Weak Yes, No, Can't say
-- Reasoning: Reasoning for the remark
+- COMPLETE_QUESTION : [REMARK] Yes, Weak Yes, No, Can't say
+- REASONING: Reasoning for the remark
+
+At the end, provide the candidate's strengths and weaknesses, followed by a final summary.
 """
 
 app = FastAPI()
@@ -220,7 +228,9 @@ async def chat_completion(request: ChatRequest):
 async def get_feedback(request: ChatRequest):
     try:
         # Format the system prompt with the resume
-        system_prompt = ASSESS_CANDIDATE_PROMPT.format(CONVERSATION=request.messages)
+        system_prompt = ASSESS_CANDIDATE_PROMPT.format(RESUME=request.resume, CONVERSATION=request.messages)
+
+        print(system_prompt)
         
         # Add the system prompt as the first message
         messages = [
