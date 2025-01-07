@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class LLM:
     def __init__(self):
         logger.info("Initializing ClaudeLangchain")
-        # Credentials will be automatically picked up from environment variables
-        pass
+        # Set region from environment variable
+        os.environ['AWS_DEFAULT_REGION'] = os.getenv('REGION', 'us-east-1')
 
     def chat_completion(
             self,

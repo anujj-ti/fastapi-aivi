@@ -27,7 +27,7 @@ Resources:
       Environment:
         Variables:
           STAGE: prod
-          AWS_DEFAULT_REGION: !Ref AWS::Region
+          REGION: !Ref AWS::Region
       Policies:
         - Version: '2012-10-17'
           Statement:

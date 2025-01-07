@@ -1,0 +1,9 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "ai-interview-app"
+resolve_s3 = true
+s3_prefix = "ai-interview-app"
+region = "us-east-1"
+profile = "saml"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
