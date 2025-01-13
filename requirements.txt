@@ -6,4 +6,7 @@ langchain-community>=0.0.10
 aws-lambda-powertools>=2.30.0
 langchain-aws>=0.1.0
 python-dotenv>=1.0.0
-mangum>=0.17.0 
+mangum>=0.17.0
+python-dotenv
+uvicorn
+pipecat-ai[daily,elevenlabs,openai,silero,google]

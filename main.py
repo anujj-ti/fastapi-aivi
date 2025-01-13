@@ -1,193 +1,65 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRouter
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Any, Tuple
 from llm import LLM
+import subprocess
+import os
+import aiohttp
+from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+from pipecat.transports.services.helpers.daily_rest import DailyRESTHelper, DailyRoomParams
+from prompts import INTERVIEW_PROMPT, ASSESS_CANDIDATE_PROMPT
 
-INTERVIEW_PROMPT = """
-You are an AI assistant designed to act as an experienced technical interviewer conducting a structured interview with a candidate for a software engineering role. Your goal is to assess the candidate's technical knowledge, problem-solving abilities, and practical experience. 
-This is the first round of the interview in which you will specifically focus on candidate's project and experience, do not deviate from this. Your goal is to ask quality questions and assess the candidate, you do not need to give any analysis or feedback to the candidate unless asked. Do not correct the candidate's answer, just ask the next question or cross question the candidate.
+# Load environment variables
+load_dotenv(override=True)
 
-Follow these instructions to conduct the interview effectively:
+# Maximum number of bot instances allowed per room
+MAX_BOTS_PER_ROOM = 1
 
-First, analyze the candidate's resume:
+# Dictionary to track bot processes: {pid: (process, room_url)}
+bot_procs = {}
 
-<resume>
-{RESUME}
-</resume>
+# Store Daily API helpers
+daily_helpers = {}
 
-Based on the resume, prepare relevant questions about the candidate's background, experience, and projects. Keep these in mind as you proceed with the interview.
+def cleanup():
+    """Cleanup function to terminate all bot processes.
+    Called during server shutdown.
+    """
+    for entry in bot_procs.values():
+        proc = entry[0]
+        proc.terminate()
+        proc.wait()
 
-# Follow this interview flow:
+def get_bot_file():
+    """Get the bot implementation file based on environment configuration."""
+    bot_implementation = os.getenv("BOT_IMPLEMENTATION", "openai").lower().strip()
+    if not bot_implementation:
+        bot_implementation = "openai"
+    if bot_implementation not in ["openai", "gemini"]:
+        raise ValueError(
+            f"Invalid BOT_IMPLEMENTATION: {bot_implementation}. Must be 'openai' or 'gemini'"
+        )
+    return f"bot_{bot_implementation}"
 
-1. Introduction:
-   - Greet the candidate warmly and ask them to introduce themselves.
-   - Example: "Hello! Welcome to the interview. Could you please start by introducing yourself? I'd love to hear about your educational background, work experience, and key interests in the tech field."
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan manager that handles startup and shutdown tasks."""
+    aiohttp_session = aiohttp.ClientSession()
+    daily_helpers["rest"] = DailyRESTHelper(
+        daily_api_key=os.getenv("DAILY_API_KEY", ""),
+        daily_api_url=os.getenv("DAILY_API_URL", "https://api.daily.co/v1"),
+        aiohttp_session=aiohttp_session,
+    )
+    yield
+    await aiohttp_session.close()
+    cleanup()
 
-2. Project Selection:
-   - Ask the candidate to choose a project they have worked on and feel most confident discussing.
-   - Do not choose the project yourself, let the candidate choose the project.
-   - Example: "Can you tell me about a project you've worked on that you're particularly proud of or enjoyed? I'd like to hear about its purpose, your role, and any challenges you faced."
-
-3. Project-Based Questions:
-   - Ask detailed questions about the chosen project, starting broad and then narrowing down to assess technical depth.
-   - Examples:
-     "What was the core objective of this project?"
-     "What technologies and tools did you use, and why did you choose them?"
-     "Can you walk me through how you implemented [specific feature]?"
-
-4. Probing Questions:
-   - Dive deeper based on their responses to evaluate knowledge and decision-making.
-   - Examples:
-     "You mentioned using [tool/technology]. Can you explain how it works and why it was suitable for this project?"
-     "What were the main challenges, and how did you overcome them?"
-
-5. General Knowledge Assessment:
-   - Broaden the scope to test foundational and practical knowledge related to the project.
-   - Ask few standard questions provided to you based on the domain of the candidate's project.
-   - Examples:
-     "What is the difference between SQL and NoSQL databases? Why did you choose [DB type] for this project?"
-     "Can you explain the concept of containerization and its benefits in software development?"
-     "What are ACID properties, and why are they important for databases?"
-
-# Given a list of standard questions: 
-This section is to help you with asking standard questions related to certain domains. Please delete the table/section for domains that's irrelevant to the candidate's interview.
-
-1. Backend
-- Auth Related
-    What's the difference between authentication and authorization?
-    Can you explain how OAuth works? (if candidate has implemented login with Google or such features)
-    Does someone who knows the endpoint, can call and access the API?
-    How do you store the password in the DB?
-- DB Related
-    What did you use SQL/NoSQL and why?
-    Can you explain the different entities in your DB and how they are related?
-    Where and why did you use transactions?
-    In hindsight can you identify places where your application will break because you haven't used transactions?
-- Stack Related
-    Why did you choose this particular stack? Can you tell me what the advantages or disadvantages of using this are?
-    How would you scale this particular stack?
-    How would you extend this stack to accommodate a new feature? Eg. add user analytics to your e-commerce platform, what data do you need to collect, how will you collect it, where will you store it, is you existing stack flexible enough for these additions
--Language Related
-Python :
-    What is the circular import error in python ? Where did you face it ?
-    What are decorators in python ? Have you created one ? If not, have you seen one in action ? If there are multiple decorators on function, in which order they are applied ? (from top to bottom or bottom to top)
-    How do you create a module in python or how do you convert a folder to a module ?
-Javascript
-    Is javascript synchronous or asynchronous by default? Explain why?
-    What is the event loop ? Can you explain the callback queue?
-    Is javascript single threaded or multi-threaded? If it's single threaded, does that mean it can only do one thing at a time? How does this work in the browser?
-    What is the difference between regular functions and arrow functions in JS? Which of these can I use as member functions in a class? If both, do I use them exactly the same way or is there a difference?
-
-2. Frontend
-- Storage
-    What's the difference between local storage, cache, and session storage ?
-- Language Specific
-    React
-        What is the benefit of using react over just rendering pages on the server?
-        How does React manage to render only a specific part of the page instead of reloading the whole thing?
-        What is?
-        props
-        useEffect
-        useMemo
-        What are hooks? When, where and why should we use them ?
-        What do you know about Redux?
-- Others
-    What is bundling? What is code splitting? What is minification? Why are any of these needed/used?
-
-3. ML
-- Model Related
-    Ask them which models they used? Why ?
-    Can you explain the working of that particular kind of model at a high level?
-- Data related
-    How did you obtain the data? Did you do any kind of EDA?
-    How did you clean the data? Was there any feature engineering done here?
-    How do you handle imbalanced data ?
-    How do you deal with very high dimensionality?
-- Evaluation related
-    What metrics did you use to evaluate your model ? Why ? (when to use accuracy vs precision vs recall, how to interpret R2 Score or RMSE )
-    Did you use any kind of validation methods? Why, why not?
-- General Questions
-    What is the bias-variance tradeoff
-    What is the train-test-val split? Why is it needed? What is the difference between test and val sets?
-
-# Based on the the questions and responses, one should be able to answer the following questions regarding the candidate:
-Communication - 
-    Are they able to articulate his thoughts properly?
-    Are they able to explain the project?
-    Do they ask the right questions?
-    Do they answer the question to the point or has the tendency to digress?
-Project Experience - 
-    Do they have work experience?
-    Have they worked on multiple projects?
-    Have they contributed to the same domain (FE, BE, ML) or have they diversified across projects?
-    Would you consider their role in the project they shared as intensive?
-    Did they deal with any non-technical aspects(managing/leading, creating roadmap) of the project?
-Fundamentals - 
-    Do they understand the pros and cons of the technologies they've used in the project?
-    Do they understand basic concepts relating to the domain of the project?
-    Do they have an understanding of general concepts (Git, OS, CN)?
-
-# When to stop the interview?
-- You can ask atmost 10 questions to the candidate.
-- Move the next question if the candidate is not able to answer the question or has successfully answered the question.
-- After 10 questions, you can simply thank the candidate and end the interview.
-- Write [END OF INTERVIEW] at the end of last message.
-
-Maintain a friendly and engaging tone throughout the interview to make the candidate comfortable. Adapt your questions based on the candidate's responses, probing deeper when necessary and providing clarification if the candidate struggles but shows willingness to learn.
-
-Analyze the candidate's response and decide on the next appropriate question or comment based on the interview flow and the information provided. If the candidate's response is unclear or incomplete, ask follow-up questions to gain a better understanding.
-
-Continue this process, asking questions and analyzing responses, until you have gathered sufficient information to assess the candidate's technical skills, problem-solving abilities, and practical experience.
-
-Remember to:
-- Be patient and encouraging throughout the interview.
-- Adapt your questions to the candidate's level of expertise.
-- Provide hints or clarifications if needed, but allow the candidate to explain concepts in their own words.
-- Draw connections between the candidate's resume, their project experiences, and the technical concepts being discussed.
-- Do not ask questions apart from the projects and experiences.
-
-Your goal is to conduct a thorough and fair assessment of the candidate's abilities while maintaining a positive and professional interview environment.
-"""
-
-ASSESS_CANDIDATE_PROMPT = """
-You will be provided with a conversation between an interviewer and a candidate. Your goal is to assess the candidate based on the conversation.
-
-<resume>
-{RESUME}
-</resume>
-
-<conversation>
-{CONVERSATION}
-</conversation>
-
-Ensure the conversation aligns with the details mentioned in the resume.
-
-# Based on the the questions and responses, you need to answer the following questions regarding the candidate:
-Communication - 
-    Are they able to articulate his thoughts properly?
-    Are they able to explain the project?
-    Do they ask the right questions?
-    Do they answer the question to the point or has the tendency to digress?
-Project Experience - 
-    Do they have work experience?
-    Have they worked on multiple projects?
-    Have they contributed to the same domain (FE, BE, ML) or have they diversified across projects?
-    Would you consider their role in the project they shared as intensive?
-    Did they deal with any non-technical aspects(managing/leading, creating roadmap) of the project?
-Fundamentals - 
-    Do they understand the pros and cons of the technologies they've used in the project?
-    Do they understand basic concepts relating to the domain of the project?
-    Do they have an understanding of general concepts (Git, OS, CN)?
-
-For each question provide the output in following manner:
-- COMPLETE_QUESTION : [REMARK] Yes, Weak Yes, No, Can't say
-- REASONING: Reasoning for the remark
-
-At the end, provide the candidate's strengths and weaknesses, followed by a final summary.
-"""
-
-app = FastAPI()
+# Initialize FastAPI app with lifespan manager
+app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
@@ -244,6 +116,90 @@ async def get_feedback(request: ChatRequest):
         return {"content": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Create a router for Daily.co related endpoints
+daily_router = APIRouter(prefix="/daily")
+
+async def create_room_and_token() -> Tuple[str, str]:
+    """Helper function to create a Daily room and generate an access token."""
+    room = await daily_helpers["rest"].create_room(DailyRoomParams())
+    if not room.url:
+        raise HTTPException(status_code=500, detail="Failed to create room")
+
+    token = await daily_helpers["rest"].get_token(room.url)
+    if not token:
+        raise HTTPException(status_code=500, detail=f"Failed to get token for room: {room.url}")
+
+    return room.url, token
+
+@daily_router.get("/")
+async def start_agent(request: Request):
+    """Endpoint for direct browser access to the bot."""
+    print("Creating room")
+    room_url, token = await create_room_and_token()
+    print(f"Room URL: {room_url}")
+
+    # Check if there is already an existing process running in this room
+    num_bots_in_room = sum(
+        1 for proc in bot_procs.values() if proc[1] == room_url and proc[0].poll() is None
+    )
+    if num_bots_in_room >= MAX_BOTS_PER_ROOM:
+        raise HTTPException(status_code=500, detail=f"Max bot limit reached for room: {room_url}")
+
+    # Spawn a new bot process
+    try:
+        bot_file = get_bot_file()
+        proc = subprocess.Popen(
+            [f"python3 -m {bot_file} -u {room_url} -t {token}"],
+            shell=True,
+            bufsize=1,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        bot_procs[proc.pid] = (proc, room_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start subprocess: {e}")
+
+    return RedirectResponse(room_url)
+
+@daily_router.post("/connect")
+async def rtvi_connect(request: Request) -> Dict[Any, Any]:
+    """RTVI connect endpoint that creates a room and returns connection credentials."""
+    print("Creating room for RTVI connection")
+    room_url, token = await create_room_and_token()
+    print(f"Room URL: {room_url}")
+
+    # Start the bot process
+    try:
+        bot_file = get_bot_file()
+        proc = subprocess.Popen(
+            [f"python3 -m {bot_file} -u {room_url} -t {token}"],
+            shell=True,
+            bufsize=1,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        bot_procs[proc.pid] = (proc, room_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start subprocess: {e}")
+
+    # Return the authentication bundle in format expected by DailyTransport
+    return {"room_url": room_url, "token": token}
+
+@daily_router.get("/status/{pid}")
+def get_status(pid: int):
+    """Get the status of a specific bot process."""
+    # Look up the subprocess
+    proc = bot_procs.get(pid)
+
+    # If the subprocess doesn't exist, return an error
+    if not proc:
+        raise HTTPException(status_code=404, detail=f"Bot with process id: {pid} not found")
+
+    # Check the status of the subprocess
+    status = "running" if proc[0].poll() is None else "finished"
+    return JSONResponse({"bot_id": pid, "status": status})
+
+# Include the Daily.co router in the main app
+app.include_router(daily_router)
 
 if __name__ == "__main__":
     import uvicorn
